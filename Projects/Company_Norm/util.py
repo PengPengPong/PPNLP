@@ -1,39 +1,40 @@
-
 import math
 import jieba
 import re
 
-def clean_punc(String): # 删除所有非空格的标点符号以及数字，含中英文
-    s=String
-    text = re.sub(u"[\s\.\!\/_,&$~%^*()+\"\'\\\|\-<;>\[\]|:￥《》～“”【】￡︳∕／＼∕＿：――·・﹑﹕；﹡＊＆｜︱￥#……（）［］．！｛｝＜＞﹣——－—＝＋﹐，。？、]","",s)
+
+def clean_punc(String):  # 删除所有非空格的标点符号以及数字，含中英文
+    s = String
+    text = re.sub(u"[\s\.\!\/_,&$~%^*()+\"\'\\\|\-<;>\[\]|:￥《》～“”【】￡︳∕／＼∕＿：――·・﹑﹕；﹡＊＆｜︱￥#……（）［］．！｛｝＜＞﹣——－—＝＋﹐，。？、]",
+                  "", s)
     return text
 
-def find_range(peices,total):
+
+def find_range(peices, total):
     '''
     mapping时候用于生成作用范围
     :param peices:
     :param total:
     :return:
     '''
-    params_range=[]
-    begin=1
-    step=math.ceil(total/peices)
-    while begin<total:
-        params_range.append((begin,min(begin+step,total)))
-        begin+=step+1
+    params_range = []
+    begin = 1
+    step = math.ceil(total / peices)
+    while begin < total:
+        params_range.append((begin, min(begin + step, total)))
+        begin += step + 1
     return params_range
 
 
 class Company_Cut():
-
     def __init__(self):
-        self.one_word_pos=self.load_one_word_pos()
-        self.vac_tag=self.load_vac_tag()
-        self.loc_set=self.load_loc_set()
-        self.loc_suffix_set=self.load_loc_suffix_set()
-        self.ind_set=self.load_ind_set()
-        self.name_set=self.load_name_set()
-        self.company_suffix=self.load_company_suffix()
+        self.one_word_pos = self.load_one_word_pos()
+        self.vac_tag = self.load_vac_tag()
+        self.loc_set = self.load_loc_set()
+        self.loc_suffix_set = self.load_loc_suffix_set()
+        self.ind_set = self.load_ind_set()
+        self.name_set = self.load_name_set()
+        self.company_suffix = self.load_company_suffix()
         self.adjust_jieba_dict()
 
     def load_one_word_pos(self):
@@ -54,7 +55,6 @@ class Company_Cut():
             vac_tag[vac] = tag
         return vac_tag
 
-
     def load_loc_set(self):
         # 导入地区
         with open('/Users/pp/pycharmprojects/nlp/locations.txt') as f:
@@ -67,7 +67,17 @@ class Company_Cut():
             loc_suffix_set = set(f.read().split('\n'))
         return loc_suffix_set
 
+    def load_ind_set(self):
+        # 导入行业词
+        with open('/Users/pp/pycharmprojects/data/归一化标注/行业词表_三次确认.txt') as f:
+            ind_set = set(f.read().split('\n'))
+        return ind_set
 
+    def load_name_set(self):
+        # 导入字号词
+        with open('/Users/pp/pycharmprojects/data/归一化标注/字号词表_三次确认.txt') as f:
+            name_set = set(f.read().split('\n'))
+        return name_set
 
     def load_company_suffix(self):
         # 导入公司suffix词典
@@ -78,11 +88,6 @@ class Company_Cut():
             company_suffix[suffix] = tag
         return company_suffix
 
-
-
-
-
-
     def adjust_jieba_dict(self):
         '''
         对结巴自定义的词库进行调整
@@ -91,35 +96,35 @@ class Company_Cut():
         # 初始化jieba的词典
         jieba.dt.check_initialized()
         # 先删除jieba原有词库中不该存在的词
-        jieba_dict_to_be_del=[]
-        loc_suffix_to_be_del=set()
-        for line in open('/Users/pp/pycharmprojects/Data/归一化标注/user_loc_suffix_to_be_del.txt','r'):
+        jieba_dict_to_be_del = []
+        loc_suffix_to_be_del = set()
+        for line in open('/Users/pp/pycharmprojects/Data/归一化标注/user_loc_suffix_to_be_del.txt', 'r'):
             # 从company_suffix拷贝而来，略作修改
             loc_suffix_to_be_del.add(line.strip())
 
-        for word,freq in jieba.dt.FREQ.items():
+        for word, freq in jieba.dt.FREQ.items():
             # 小于等于2字的不处理
-            if len(word)<=2:
+            if len(word) <= 2:
                 continue
             # 大于等于5个字的全部删除
-            elif len(word)>=5:
+            elif len(word) >= 5:
                 jieba_dict_to_be_del.append(word)
             # 3到4个字的，如果含公司后缀，则删除
             else:
                 for suf in loc_suffix_to_be_del:
-                    if len(suf)==1:
+                    if len(suf) == 1:
                         continue
-                    if word[-len(suf):]==suf:
+                    if word[-len(suf):] == suf:
                         jieba_dict_to_be_del.append(word)
                         break
         for i in jieba_dict_to_be_del:
             jieba.dt.FREQ.pop(i)
         # 再导入用户自定义词表：不直接调用jieba.loads，因为如果用户词表中包含jieba中已有的词，词频会覆盖，这是不希望发生的
-        for line in open('/Users/pp/pycharmprojects/Data/Companys/User_Dict_For_CompanyNorm.txt','r'):
-            [word,freq]=line.strip().split()
-            jieba.dt.FREQ.setdefault(word,int(freq))
+        for line in open('/Users/pp/pycharmprojects/Data/Companys/User_Dict_For_CompanyNorm.txt', 'r'):
+            [word, freq] = line.strip().split()
+            jieba.dt.FREQ.setdefault(word, int(freq))
 
-    def clear_company_suffix(self,company):
+    def clear_company_suffix(self, company):
         '''
         清除组织后缀词
         '''
@@ -130,16 +135,16 @@ class Company_Cut():
                 break
         return main_part
 
-
-    def cut_adjust(self,seg_list):
+    def cut_adjust(self, seg_list):
         adjusted_seg = []
         global skip
         skip = 0
+
         def is_loc(word):
             if not word:
                 return False
             elif self.vac_tag.get(word, "") == 'loc' or word in self.loc_set or (word[-1:] in self.loc_suffix_set) or (
-                word[-2:] in self.loc_suffix_set):
+                        word[-2:] in self.loc_suffix_set):
                 return True
             else:
                 return False
@@ -193,8 +198,8 @@ class Company_Cut():
                     # 第二个字，是人工标注的需要向前合并的，向前合并
                     forward_merge()
                 elif (j == 1 and not is_loc(seg_list[j - 1])) or (
-                            j == 1 and len(seg_list) >= 3 and is_ind(seg_list[j + 1])) or (
-                            j == 2 and not is_loc(seg_list[j - 1]) and not is_loc(seg_list[j - 2])):
+                                    j == 1 and len(seg_list) >= 3 and is_ind(seg_list[j + 1])) or (
+                                    j == 2 and not is_loc(seg_list[j - 1]) and not is_loc(seg_list[j - 2])):
                     # 第二个字，前一个不是地区;或者第二个字，(前一个是两字地区,此条删除），后一个是行业词；或者第三个字，前两个都不是地区;与前面的合
                     forward_merge()
 
@@ -211,12 +216,13 @@ class Company_Cut():
 
                             # 如果该词是人工标注需要向前合并的，且，(往前两个词也是地区词 或 后面一个词是行业词)，则地区可能判断出错，与前一个合并
                         elif self.one_word_pos.get(seg_list[j], 0) == -1 and (
-                            (j > 1 and is_loc(seg_list[j - 2])) or (j < len(seg_list) - 1 and is_ind(seg_list[j + 1]))):
+                                    (j > 1 and is_loc(seg_list[j - 2])) or (
+                                                j < len(seg_list) - 1 and is_ind(seg_list[j + 1]))):
                             forward_merge()
 
                         # 如果该词后面一个词是行业词或者为3个字（4个字的场景已经在前面判断了），且，往前两个也是地区词，则地区可能判断出错，与前一个合并
                         elif j > 1 and is_loc(seg_list[j - 2]) and j < len(seg_list) - 1 and (
-                            is_ind(seg_list[j + 1]) or len(seg_list[j + 1]) == 3):
+                                    is_ind(seg_list[j + 1]) or len(seg_list[j + 1]) == 3):
                             forward_merge()
 
                         # 如果该词后面一个词也是地区词，则谁词频高谁更可能是地区.如果相等则往前合并
@@ -280,7 +286,8 @@ class Company_Cut():
                 # n_gram
                 for n in range(len(seg), 1, -1):  # 最低2元语法，最高为 字数-2 元语法（至少保证剩余两个字）
                     if n == len(seg) - 1 and (
-                            seg[-1] not in self.company_suffix or (seg[-1] in self.company_suffix and is_ind(seg[-2:]))):
+                                    seg[-1] not in self.company_suffix or (
+                                            seg[-1] in self.company_suffix and is_ind(seg[-2:]))):
                         # 这样拆分出来剩下的是一个字,如果这个字不是属于公司后缀，或者属于后缀，但是与前面一个词相连为行业词（说明不可分开）则跳过
                         continue
                     if is_loc(seg[:n]):
@@ -314,10 +321,7 @@ class Company_Cut():
 
         return adjusted_seg_split
 
-
-
-
-    def company_split_tier(self,company):
+    def company_split_tier(self, company):
 
         company = clean_punc(company)
         ordinal_num_set = set(['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'])
@@ -467,40 +471,40 @@ class Company_Cut():
 
         return comp_info
 
-
     # 对公司进行彻底分词：先整体拆分为段，再进行调整分词，再拆分为组织主体分离
-    def absolutely_cut(self,company):
+    def absolutely_cut(self, company):
         '''
         强行斩断可能引起不可预料的分词效果，比如餐厅的餐，和前面的词合并了
         '''
-        all_seg=[]
-        for main_part,org,tier in self.company_split_tier(company):
-            seg_list=self.cut_adjust(list(jieba.cut(main_part+org)))
+        all_seg = []
+        company_split_result = self.company_split_tier(company)
+        for main_part, org, tier in company_split_result:
+            seg_list = self.cut_adjust(list(jieba.cut(main_part + org)))
             '''
             分词后没有再度分拆出来的，有两种情况:
             一种是，后缀是店，分词是商店这种，分词后字数多了的；
             一种是后缀是连锁有限公司，分词后是连锁/有限公司，分词后字数少了的。通常分词字数少了不用管，但是也可能出现部分词被合并到前面去的情况，
             比如第一分公司，变成了第一分/公司，这样就是有问题的了
             '''
-            if seg_list and len(seg_list[-1])>len(org): # 分词后字数多了的，则强行分拆即可
-                seg_list[-1]=seg_list[-1][:-len(org)]
+            if seg_list and len(seg_list[-1]) > len(org):  # 分词后字数多了的，则强行分拆即可
+                seg_list[-1] = seg_list[-1][:-len(org)]
                 seg_list.append(org)
-            elif seg_list and len(seg_list[-1])<len(org): # 分词后字数变少了的，则不断往前比，如果恰好完全符合，则没问题
-                res_len=len(org)
-                suf_index=1
-                while res_len>0: # 只要没减完，就持续光标前移，继续减
-                    res_len=res_len-len(seg_list[-suf_index])
-                    suf_index+=1
+            elif seg_list and len(seg_list[-1]) < len(org):  # 分词后字数变少了的，则不断往前比，如果恰好完全符合，则没问题
+                res_len = len(org)
+                suf_index = 1
+                while res_len > 0:  # 只要没减完，就持续光标前移，继续减
+                    res_len = res_len - len(seg_list[-suf_index])
+                    suf_index += 1
                 # 如果刚好减完，则未出现合并现象（如后缀是分公司，但是合并成了 第一分/公司）
                 # 如果减完停止是负数，则说明有后缀被合并，强行拆分
-                if res_len<0:
-                    suf_index-=1
+                if res_len < 0:
+                    suf_index -= 1
                     # 此时abs(res_len)表示多出的字
-                    res_word=seg_list[-suf_index][abs(res_len):]
-                    seg_list[-suf_index]=seg_list[-suf_index][:abs(res_len)]
-                    if res_word in self.company_suffix: # 如果分离出来的词在后缀中，则直接插入
-                        seg_list.insert(-suf_index+1,res_word)
-                    else: # 如果不在后缀，则与下一个词合并
-                        seg_list[-suf_index+1]=res_word+seg_list[-suf_index+1]
+                    res_word = seg_list[-suf_index][abs(res_len):]
+                    seg_list[-suf_index] = seg_list[-suf_index][:abs(res_len)]
+                    if res_word in self.company_suffix:  # 如果分离出来的词在后缀中，则直接插入
+                        seg_list.insert(-suf_index + 1, res_word)
+                    else:  # 如果不在后缀，则与下一个词合并
+                        seg_list[-suf_index + 1] = res_word + seg_list[-suf_index + 1]
             all_seg.extend(seg_list)
-        return all_seg
+        return all_seg, company_split_result
