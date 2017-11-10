@@ -14,6 +14,7 @@ org_cut = Company_Cut()
 model_path = '/Users/pp/pycharmprojects/nlp/projects/'
 model_name = 'model_company(1000,40,5,10)_20171109_absolute_cut'
 model = gensim.models.Word2Vec.load(model_path + model_name)
+model.wv.init_sims(True) # 预先将模型中的向量归一化
 vocab = list(model.wv.vocab.keys())
 
 
@@ -136,7 +137,7 @@ def short_cut_for_ind():
 
 
 if __name__ == '__main__':
-    # short_cut_for_ind()
+    short_cut_for_ind()
 
     # 标注字号表
     to_tag_list = [line.strip() for line in open('/Users/pp/pycharmprojects/data/归一化标注/字号词表.txt', 'r')]

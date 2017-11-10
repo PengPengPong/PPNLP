@@ -25,9 +25,8 @@ def company_group(company):
 
 
 def company_split_tag(company):
-    mode = set(
-        [('loc', 'name', 'ind'), ('name', 'loc', 'ind'), ('name', 'ind', 'loc'), ('name', 'ind'), ('loc', 'name'),
-         ('name', 'loc'), ('name')])
+    mode = {('loc', 'name', 'ind'), ('name', 'loc', 'ind'), ('name', 'ind', 'loc'), ('name', 'ind'), ('loc', 'name'),
+         ('name', 'loc'), ('name')}
     group_dict = company_group(company)
     for company_tier_info in group_dict:
         seg_tag_list = []  # tag按照顺序给出的tag列表
