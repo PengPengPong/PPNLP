@@ -1,6 +1,7 @@
 import math
 import jieba
 import re
+from config import WORD_PRE_TAG_PATH
 
 
 def clean_punc(String):  # 删除所有非空格的标点符号以及数字，含中英文
@@ -48,9 +49,7 @@ class Company_Cut():
     def load_vac_tag(self):
         # 导入机器打的整个词向量词汇表中的词语属性标签
         vac_tag = {}
-        for line in open(
-                '/Users/pp/pycharmprojects/data/归一化标注/model_company(1000,40,5,8)_20171105_(cut_adjust,company_split)_模型下所有词语类型机器标注.txt',
-                'r'):
+        for line in open(WORD_PRE_TAG_PATH,'r'):
             [vac, tag] = line.strip().split()
             vac_tag[vac] = tag
         return vac_tag
@@ -69,13 +68,13 @@ class Company_Cut():
 
     def load_ind_set(self):
         # 导入行业词
-        with open('/Users/pp/pycharmprojects/data/归一化标注/行业词表_三次确认.txt') as f:
+        with open('/Users/pp/pycharmprojects/data/归一化标注/行业词表_最终确认.txt') as f:
             ind_set = set(f.read().split('\n'))
         return ind_set
 
     def load_name_set(self):
         # 导入字号词
-        with open('/Users/pp/pycharmprojects/data/归一化标注/字号词表_三次确认.txt') as f:
+        with open('/Users/pp/pycharmprojects/data/归一化标注/字号词表_最终确认.txt') as f:
             name_set = set(f.read().split('\n'))
         return name_set
 
@@ -95,7 +94,11 @@ class Company_Cut():
         '''
         # 初始化jieba的词典
         jieba.dt.check_initialized()
-        # 先删除jieba原有词库中不该存在的词
+        # 先导入用户自定义词表：不直接调用jieba.loads，因为如果用户词表中包含jieba中已有的词，词频会覆盖，这是不希望发生的
+        for line in open('/Users/pp/pycharmprojects/Data/Companys/User_Dict_For_CompanyNorm.txt', 'r'):
+            [word, freq] = line.strip().split()
+            jieba.dt.FREQ.setdefault(word, int(freq))
+        # 再删除jieba原有词库中不该存在的词
         jieba_dict_to_be_del = []
         loc_suffix_to_be_del = set()
         for line in open('/Users/pp/pycharmprojects/Data/归一化标注/user_loc_suffix_to_be_del.txt', 'r'):
@@ -112,17 +115,13 @@ class Company_Cut():
             # 3到4个字的，如果含公司后缀，则删除
             else:
                 for suf in loc_suffix_to_be_del:
-                    if len(suf) == 1:
+                    if len(suf) == 1 and len(word) == 3:
                         continue
                     if word[-len(suf):] == suf:
                         jieba_dict_to_be_del.append(word)
                         break
         for i in jieba_dict_to_be_del:
             jieba.dt.FREQ.pop(i)
-        # 再导入用户自定义词表：不直接调用jieba.loads，因为如果用户词表中包含jieba中已有的词，词频会覆盖，这是不希望发生的
-        for line in open('/Users/pp/pycharmprojects/Data/Companys/User_Dict_For_CompanyNorm.txt', 'r'):
-            [word, freq] = line.strip().split()
-            jieba.dt.FREQ.setdefault(word, int(freq))
 
     def clear_company_suffix(self, company):
         '''
@@ -136,6 +135,7 @@ class Company_Cut():
         return main_part
 
     def cut_adjust(self, seg_list):
+        # TODO:看看能不能从决策树模型发展出一套吸引力/排斥力模型出来，感觉很好玩的样子。在归一化弄完之后尝试。
         adjusted_seg = []
         global skip
         skip = 0
@@ -214,7 +214,7 @@ class Company_Cut():
 
                             forward_merge()
 
-                            # 如果该词是人工标注需要向前合并的，且，(往前两个词也是地区词 或 后面一个词是行业词)，则地区可能判断出错，与前一个合并
+                        # 如果该词是人工标注需要向前合并的，且，(往前两个词也是地区词 或 后面一个词是行业词)，则地区可能判断出错，与前一个合并
                         elif self.one_word_pos.get(seg_list[j], 0) == -1 and (
                                     (j > 1 and is_loc(seg_list[j - 2])) or (
                                                 j < len(seg_list) - 1 and is_ind(seg_list[j + 1]))):
@@ -251,11 +251,23 @@ class Company_Cut():
                                         seg_list[j] + self.clear_company_suffix(seg_list[j + 1])):
                             backward_merge()
 
+                        # 如果前面是行业词，则向后合并：
+                        elif j > 0 and is_ind(seg_list[j - 1]):
+                            backward_merge()
                         else:
                             forward_merge()
                     # 如果后一个是地区词，则与前面的合并
                     elif j < len(seg_list) - 1 and is_loc(seg_list[j + 1]):
-                        forward_merge()
+                        # 但是如果前一个是大于等于4个字的，则后面的地区词可能判断错误，与后一个合并
+                        if j > 0 and len(seg_list[j - 1]) >= 4:
+                            backward_merge()
+
+                        # 如果该词是人工标注需要向后合并的，且前面一个词是行业词，则地区可能判断出错，与后一个合并
+                        elif self.one_word_pos.get(seg_list[j], 0) == 1 and j > 0 and is_ind(seg_list[j - 1]):
+                            backward_merge()
+
+                        else:
+                            forward_merge()
 
                     elif self.one_word_pos.get(seg_list[j], 0) == 1 and j < len(seg_list) - 1:  # 如果是人工标注的需要往后合并的位置
                         backward_merge()
@@ -359,7 +371,7 @@ class Company_Cut():
                 if suffix in company[:-len(suffix)]:
                     # 需要分词
                     temp_company = ''
-                    for company_seg in self.cut_adjust(list(jieba.cut(company))):
+                    for company_seg in jieba.cut(company):
                         if company_seg == suffix:  # 直接被分词分出来了，可直接分拆
                             temp_company += '#' * len(suffix)
                         # 出现在词语中，没有被单独分离出来，则需要判断其位置

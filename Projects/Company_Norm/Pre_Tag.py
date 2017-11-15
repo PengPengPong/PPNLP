@@ -12,9 +12,9 @@ import jieba
 
 org_cut = Company_Cut()
 model_path = '/Users/pp/pycharmprojects/nlp/projects/'
-model_name = 'model_company(1000,40,5,10)_20171109_absolute_cut'
+model_name = 'model_company(1000,40,5,10)_20171111_absolute_cut'
 model = gensim.models.Word2Vec.load(model_path + model_name)
-model.wv.init_sims(True) # 预先将模型中的向量归一化
+model.wv.init_sims(True)  # 预先将模型中的向量归一化
 vocab = list(model.wv.vocab.keys())
 
 
@@ -39,16 +39,16 @@ name_vec = cal_cluster_vec(org_cut.name_set)
 loc_vec = cal_cluster_vec(org_cut.loc_set)
 
 
-def cluster_top_simi(cluss_vec, single_vec, topn=5):
+def cluster_top_simi(cluster_vec, single_vec, topn=5):
     '''
     计算一个词处于某一类的概率
     '''
-    simi_vec = np.dot(cluss_vec, single_vec)
+    simi_vec = np.dot(cluster_vec, single_vec)
     topn_simi = simi_vec[matutils.argsort(simi_vec, topn=topn, reverse=True)]
-    if topn_simi[0] > 0.99:  # 如果存在完全匹配的，则直接返回完全匹配的
-        return 1
-    else:
-        return topn_simi.mean(0)
+    # if topn_simi[0] > 0.99:  # 如果存在完全匹配的，则直接返回完全匹配的
+    #     return 1
+    # else:
+    return topn_simi.mean(0)
 
 
 def find_company_seg_type(company_seg):
@@ -67,9 +67,8 @@ def find_company_seg_type(company_seg):
     simi_result.append(cluster_top_simi(ind_vec, seg_vec))
     simi_result = np.array(simi_result)
     # 如果存在多个1，则字号变为0
-    if simi_result[0] == simi_result[1] == 1 or simi_result[0] == simi_result[2] == 1:
-        simi_result[0] = 0
-
+    # if simi_result[0] == simi_result[1] == 1 or simi_result[0] == simi_result[2] == 1:
+    #     simi_result[0] = 0
     return simi_dict[simi_result.argmax()]
 
 
@@ -100,7 +99,7 @@ def vocab_pre_tag(index_range):
         vacab_tag[voc] = find_company_seg_type(voc)
         count += 1
         if count % 10000 == 0:
-            print('processed' / range_len, count, 'cost', time() - start)
+            print('processed', count / range_len, 'cost', time() - start)
     return vacab_tag
 
 
@@ -111,13 +110,11 @@ def generate_model_vac_tag():
     vocab_num = len(vocab)
     # vocab_num=1000
     index_range = find_range(cpu_count, vocab_num)
-    print(index_range)
     pool = multiprocessing.Pool(processes=cpu_count)
     result = pool.map(vocab_pre_tag, index_range)
 
     # 存入文件，方便以后调用
-    with open('/Users/pp/pycharmprojects/data/归一化标注//Users/pp/pycharmprojects/data/归一化标注/' + model_name + '.txt',
-              'w') as f:
+    with open('/Users/pp/pycharmprojects/data/归一化标注/' + model_name + '_模型下所有词语类型机器标注_无强制匹配.txt','w') as f:
         for res in result:
             for k, v in res.items():
                 f.write(k + '\t' + v + '\n')
@@ -137,12 +134,15 @@ def short_cut_for_ind():
 
 
 if __name__ == '__main__':
-    short_cut_for_ind()
+    # short_cut_for_ind()
 
     # 标注字号表
-    to_tag_list = [line.strip() for line in open('/Users/pp/pycharmprojects/data/归一化标注/字号词表.txt', 'r')]
-    machine_tag('/Users/pp/pycharmprojects/data/归一化标注/字号词表_机器标注_原始第二次.txt', to_tag_list)
+    # to_tag_list = [line.strip() for line in open('/Users/pp/pycharmprojects/data/归一化标注/字号词表.txt', 'r')]
+    # machine_tag('/Users/pp/pycharmprojects/data/归一化标注/字号词表_机器标注_原始第二次.txt', to_tag_list)
 
     # 标注行业表
-    to_tag_list = [line.strip() for line in open('/Users/pp/pycharmprojects/data/归一化标注/行业词表_短分词.txt', 'r')]
-    machine_tag('/Users/pp/pycharmprojects/data/归一化标注/行业词表_机器标注_原始第二次.txt', to_tag_list)
+    # to_tag_list = [line.strip() for line in open('/Users/pp/pycharmprojects/data/归一化标注/行业词表_短分词.txt', 'r')]
+    # machine_tag('/Users/pp/pycharmprojects/data/归一化标注/行业词表_机器标注_原始第二次.txt', to_tag_list)
+
+    generate_model_vac_tag()
+    # find_company_seg_type('富民')

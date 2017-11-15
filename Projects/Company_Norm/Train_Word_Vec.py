@@ -23,8 +23,8 @@ logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s',
 
 
 inpath = '/Users/pp/pycharmprojects/Data/Companys/Company_PreSeg.txt'
-model_path = '/Users/pp/pycharmprojects/data/归一化标注//Users/pp/pycharmprojects/nlp/projects/'
-model_name = 'model_company(1000,40,5,10)_20171109_absolute_cut'
+model_path = '/Users/pp/pycharmprojects/nlp/projects/'
+model_name = 'model_company(1000,40,5,10)_20171111_absolute_cut'
 
 start = time()
 sentences = MySentences_PreProcessing(inpath)  # 输入是句子的序列. 每个句子是一个单词列表

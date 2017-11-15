@@ -15,10 +15,10 @@ def company_group(company):
     group_dict = []
     for main_part, org, tier in split_result:
         main_part_seg = []
-        while len(''.join(main_part_seg)) < main_part:  # 没有加够足够的字就继续加
+        while len(''.join(main_part_seg)) < len(main_part):  # 没有加够足够的字就继续加
             main_part_seg.append(all_seg[0])
             del all_seg[0]
-        if len(''.join(main_part_seg)) > main_part:
+        if len(''.join(main_part_seg)) > len(main_part):
             raise Exception('出现了不可预知的词长匹配错误')
         group_dict.append({'main_seg': main_part_seg, 'suffix': org, 'tier': tier})
     return group_dict
@@ -53,3 +53,6 @@ def company_split_tag(company):
         group_pattern = [i for i, j in groupby(seg_tag_list)]
         if group_pattern not in mode:
             print('not normal mode', list(zip(company_tier_info['main_seg'], seg_tag)))
+
+if __name__ == '__main__':
+    print(company_group('中国移动通信集团有限公司'))

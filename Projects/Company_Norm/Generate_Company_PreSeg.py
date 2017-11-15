@@ -60,6 +60,7 @@ if __name__ == '__main__':
     company_num = company_len.count
     # company_num=10000
     print(org_cut.cut_adjust(list(jieba.cut('中国移动通信集团'))))
+    print(org_cut.absolutely_cut('喀左县公安局平房子派出所'))
     cpu_count = 6
     index_range = find_range(cpu_count, company_num)
     print(index_range)
