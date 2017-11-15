@@ -1,7 +1,9 @@
 import math
 import jieba
 import re
-from config import WORD_PRE_TAG_PATH
+import numpy as np
+import gensim
+from gensim import matutils
 
 
 def clean_punc(String):  # 删除所有非空格的标点符号以及数字，含中英文
@@ -29,14 +31,25 @@ def find_range(peices, total):
 
 class Company_Cut():
     def __init__(self):
+        self.model = self.load_word_vec_model()
         self.one_word_pos = self.load_one_word_pos()
         self.vac_tag = self.load_vac_tag()
         self.loc_set = self.load_loc_set()
         self.loc_suffix_set = self.load_loc_suffix_set()
         self.ind_set = self.load_ind_set()
         self.name_set = self.load_name_set()
+        self.ind_vec = self.cal_cluster_vec(self.ind_set)
+        self.name_vec = self.cal_cluster_vec(self.name_set)
+        self.loc_vec = self.cal_cluster_vec(self.loc_set)
         self.company_suffix = self.load_company_suffix()
         self.adjust_jieba_dict()
+
+    def load_word_vec_model(self):
+        model_path = '/Users/pp/pycharmprojects/nlp/projects/'
+        model_name = 'model_company(1000,40,5,10)_20171111_absolute_cut'
+        model = gensim.models.Word2Vec.load(model_path + model_name)
+        model.wv.init_sims(True)  # 预先将模型中的向量归一化
+        return model
 
     def load_one_word_pos(self):
         # 导入人工标注的词的合并信息
@@ -49,7 +62,9 @@ class Company_Cut():
     def load_vac_tag(self):
         # 导入机器打的整个词向量词汇表中的词语属性标签
         vac_tag = {}
-        for line in open(WORD_PRE_TAG_PATH,'r'):
+        for line in open(
+                '/Users/pp/pycharmprojects/data/归一化标注/model_company(1000,40,5,10)_20171111_absolute_cut_模型下所有词语类型机器标注_无强制匹配.txt',
+                'r'):
             [vac, tag] = line.strip().split()
             vac_tag[vac] = tag
         return vac_tag
@@ -87,6 +102,17 @@ class Company_Cut():
             company_suffix[suffix] = tag
         return company_suffix
 
+    # 预先计算行业词、字号词、地区词的词向量，储存
+    def cal_cluster_vec(self, cluster_set):
+        cluster_vec = []
+        for clus in cluster_set:
+            try:
+                cluster_vec.append(self.model[clus])
+            except:
+                continue
+        cluster_vec = np.array(cluster_vec)
+        return cluster_vec
+
     def adjust_jieba_dict(self):
         '''
         对结巴自定义的词库进行调整
@@ -94,11 +120,7 @@ class Company_Cut():
         '''
         # 初始化jieba的词典
         jieba.dt.check_initialized()
-        # 先导入用户自定义词表：不直接调用jieba.loads，因为如果用户词表中包含jieba中已有的词，词频会覆盖，这是不希望发生的
-        for line in open('/Users/pp/pycharmprojects/Data/Companys/User_Dict_For_CompanyNorm.txt', 'r'):
-            [word, freq] = line.strip().split()
-            jieba.dt.FREQ.setdefault(word, int(freq))
-        # 再删除jieba原有词库中不该存在的词
+        # 先删除jieba原有词库中不该存在的词
         jieba_dict_to_be_del = []
         loc_suffix_to_be_del = set()
         for line in open('/Users/pp/pycharmprojects/Data/归一化标注/user_loc_suffix_to_be_del.txt', 'r'):
@@ -106,22 +128,26 @@ class Company_Cut():
             loc_suffix_to_be_del.add(line.strip())
 
         for word, freq in jieba.dt.FREQ.items():
-            # 小于等于2字的不处理
-            if len(word) <= 2:
+            # 小于等于3字的不处理
+            if len(word) <= 3:
                 continue
-            # 大于等于5个字的全部删除
+            # 大于等于5个字的全部删除(容易导致地区词也被删除)
             elif len(word) >= 5:
                 jieba_dict_to_be_del.append(word)
-            # 3到4个字的，如果含公司后缀，则删除
+            # 4个字的，如果含公司后缀，则删除
             else:
                 for suf in loc_suffix_to_be_del:
-                    if len(suf) == 1 and len(word) == 3:
-                        continue
+                    #                     if len(suf) == 1 and len(word) == 3:
+                    #                         continue
                     if word[-len(suf):] == suf:
                         jieba_dict_to_be_del.append(word)
                         break
         for i in jieba_dict_to_be_del:
             jieba.dt.FREQ.pop(i)
+        # 再导入用户自定义词表：不直接调用jieba.loads，因为如果用户词表中包含jieba中已有的词，词频会覆盖，这是不希望发生的
+        for line in open('/Users/pp/pycharmprojects/Data/Companys/User_Dict_For_CompanyNorm.txt', 'r'):
+            [word, freq] = line.strip().split()
+            jieba.dt.FREQ.setdefault(word, int(freq))
 
     def clear_company_suffix(self, company):
         '''
@@ -134,26 +160,32 @@ class Company_Cut():
                 break
         return main_part
 
+    def is_loc(self, word):
+        if not word:
+            return False
+        elif self.vac_tag.get(word, "") == 'loc' or word in self.loc_set or (word[-1:] in self.loc_suffix_set) or (
+                    word[-2:] in self.loc_suffix_set):
+            return True
+        else:
+            return False
+
+    def is_ind(self, word):
+        if self.vac_tag.get(word, "") == 'ind':
+            return True
+        else:
+            return False
+
+    def is_vac(self, word):
+        if word in jieba.dt.FREQ or word in self.vac_tag:
+            return True
+        else:
+            return False
+
     def cut_adjust(self, seg_list):
         # TODO:看看能不能从决策树模型发展出一套吸引力/排斥力模型出来，感觉很好玩的样子。在归一化弄完之后尝试。
         adjusted_seg = []
         global skip
         skip = 0
-
-        def is_loc(word):
-            if not word:
-                return False
-            elif self.vac_tag.get(word, "") == 'loc' or word in self.loc_set or (word[-1:] in self.loc_suffix_set) or (
-                        word[-2:] in self.loc_suffix_set):
-                return True
-            else:
-                return False
-
-        def is_ind(word):
-            if self.vac_tag.get(word, "") == 'ind':
-                return True
-            else:
-                return False
 
         def forward_merge():
             adjusted_seg.append(adjusted_seg[-1] + seg_list[j])
@@ -161,6 +193,8 @@ class Company_Cut():
 
         def backward_merge():
             global skip
+            if j == len(seg_list) - 1:
+                adjusted_seg.append(seg_list[j])  # 后面没有词了
             if j < len(seg_list) - 1:
                 adjusted_seg.append(seg_list[j] + seg_list[j + 1])
                 skip = 1
@@ -197,9 +231,9 @@ class Company_Cut():
                 elif j == 1 and self.one_word_pos.get(seg_list[j], 0) == -1:
                     # 第二个字，是人工标注的需要向前合并的，向前合并
                     forward_merge()
-                elif (j == 1 and not is_loc(seg_list[j - 1])) or (
-                                    j == 1 and len(seg_list) >= 3 and is_ind(seg_list[j + 1])) or (
-                                    j == 2 and not is_loc(seg_list[j - 1]) and not is_loc(seg_list[j - 2])):
+                elif (j == 1 and not self.is_loc(seg_list[j - 1])) or (
+                                    j == 1 and len(seg_list) >= 3 and self.is_ind(seg_list[j + 1])) or (
+                                    j == 2 and not self.is_loc(seg_list[j - 1]) and not self.is_loc(seg_list[j - 2])):
                     # 第二个字，前一个不是地区;或者第二个字，(前一个是两字地区,此条删除），后一个是行业词；或者第三个字，前两个都不是地区;与前面的合
                     forward_merge()
 
@@ -208,28 +242,27 @@ class Company_Cut():
                     adjusted_seg.append(seg_list[j])
 
                 elif j > 0:
-                    if is_loc(seg_list[j - 1]):  # 如果前一个词是地区词，则与后一个合并
+                    if self.is_loc(seg_list[j - 1]):  # 如果前一个词是地区词，则与后一个合并
                         # 但是如果后一个是大于等于4个字的，则与前一个合并
                         if j < len(seg_list) - 1 and len(seg_list[j + 1]) >= 4:
-
                             forward_merge()
 
                         # 如果该词是人工标注需要向前合并的，且，(往前两个词也是地区词 或 后面一个词是行业词)，则地区可能判断出错，与前一个合并
                         elif self.one_word_pos.get(seg_list[j], 0) == -1 and (
-                                    (j > 1 and is_loc(seg_list[j - 2])) or (
-                                                j < len(seg_list) - 1 and is_ind(seg_list[j + 1]))):
+                                    (j > 1 and self.is_loc(seg_list[j - 2])) or (
+                                                j < len(seg_list) - 1 and self.is_ind(seg_list[j + 1]))):
                             forward_merge()
 
                         # 如果该词后面一个词是行业词或者为3个字（4个字的场景已经在前面判断了），且，往前两个也是地区词，则地区可能判断出错，与前一个合并
-                        elif j > 1 and is_loc(seg_list[j - 2]) and j < len(seg_list) - 1 and (
-                                    is_ind(seg_list[j + 1]) or len(seg_list[j + 1]) == 3):
+                        elif j > 1 and self.is_loc(seg_list[j - 2]) and j < len(seg_list) - 1 and (
+                                    self.is_ind(seg_list[j + 1]) or len(seg_list[j + 1]) == 3):
                             forward_merge()
 
-                        # 如果该词后面一个词也是地区词，则谁词频高谁更可能是地区.如果相等则往前合并
-                        elif j < len(seg_list) - 1 and is_loc(seg_list[j + 1]):
+                        # 如果该词后面一个词也是地区词，则谁词频高谁更可能是地区.如果相等则往后合并
+                        elif j < len(seg_list) - 1 and self.is_loc(seg_list[j + 1]):
                             freq_before = jieba.dt.FREQ.get(seg_list[j - 1], 0)
                             freq_after = jieba.dt.FREQ.get(seg_list[j + 1], 0)
-                            if freq_before > freq_after:
+                            if freq_before >= freq_after:
                                 backward_merge()
                             else:
                                 forward_merge()
@@ -241,29 +274,30 @@ class Company_Cut():
                         else:
                             adjusted_seg.append(seg_list[j])
 
-                    elif j > 1 and is_loc(seg_list[j - 2]):  # 如果往前数两个是地区词，则大概率与前一个合并
+                    elif j > 1 and self.is_loc(seg_list[j - 2]):  # 如果往前数两个是地区词，则大概率与前一个合并
                         # 如果人工标注下也表明其应当向前合并，则直接向前合并：
                         if self.one_word_pos.get(seg_list[j], 0) == -1:  # 如果是人工标注的需要往前合并的位置
                             forward_merge()
 
                         # 如果和后面的词合并了是一个行业词，（或者是人工标注的需要往后合并：未添加），则与后面合并，否则和前面合并
-                        elif j < len(seg_list) - 1 and is_ind(
+                        elif j < len(seg_list) - 1 and self.is_ind(
                                         seg_list[j] + self.clear_company_suffix(seg_list[j + 1])):
                             backward_merge()
 
-                        # 如果前面是行业词，则向后合并：
-                        elif j > 0 and is_ind(seg_list[j - 1]):
+                        # 如果前面是行业词，且后面不是行业词，则向后合并：
+                        elif j > 0 and self.is_ind(seg_list[j - 1]) and j < len(seg_list) - 1 and not self.is_ind(
+                                seg_list[j + 1]):
                             backward_merge()
                         else:
                             forward_merge()
                     # 如果后一个是地区词，则与前面的合并
-                    elif j < len(seg_list) - 1 and is_loc(seg_list[j + 1]):
+                    elif j < len(seg_list) - 1 and self.is_loc(seg_list[j + 1]):
                         # 但是如果前一个是大于等于4个字的，则后面的地区词可能判断错误，与后一个合并
                         if j > 0 and len(seg_list[j - 1]) >= 4:
                             backward_merge()
 
                         # 如果该词是人工标注需要向后合并的，且前面一个词是行业词，则地区可能判断出错，与后一个合并
-                        elif self.one_word_pos.get(seg_list[j], 0) == 1 and j > 0 and is_ind(seg_list[j - 1]):
+                        elif self.one_word_pos.get(seg_list[j], 0) == 1 and j > 0 and self.is_ind(seg_list[j - 1]):
                             backward_merge()
 
                         else:
@@ -287,7 +321,7 @@ class Company_Cut():
             else:
                 adjusted_seg.append(seg_list[j])
                 # print('adjusted_seg13',adjusted_seg)
-        # 拆分策略(大于4个字的)
+        # 拆分策略(大于等于4个字的)
         adjusted_seg_split = []
         for seg in adjusted_seg:
             # 从前往后看地区
@@ -299,10 +333,10 @@ class Company_Cut():
                 for n in range(len(seg), 1, -1):  # 最低2元语法，最高为 字数-2 元语法（至少保证剩余两个字）
                     if n == len(seg) - 1 and (
                                     seg[-1] not in self.company_suffix or (
-                                            seg[-1] in self.company_suffix and is_ind(seg[-2:]))):
+                                            seg[-1] in self.company_suffix and self.is_ind(seg[-2:]))):
                         # 这样拆分出来剩下的是一个字,如果这个字不是属于公司后缀，或者属于后缀，但是与前面一个词相连为行业词（说明不可分开）则跳过
                         continue
-                    if is_loc(seg[:n]):
+                    if self.is_loc(seg[:n]):
                         adjusted_seg_split.append(seg[:n])
                         seg = seg[n:]
                         break  # 一旦任何一次拆分成功，则立马停止剩下的几元语法的尝试，直接对剩余的词做处理
@@ -319,7 +353,7 @@ class Company_Cut():
                 while len(seg) >= 4 and not skip_while:
                     # n_gram
                     for n in range(len(seg) - 2, 1, -1):  # 最低2元语法，最高为 字数-2 元语法（至少保证剩余两个字）
-                        if is_ind(seg[-n:]):
+                        if self.is_ind(seg[-n:]):
                             reverse_list.append(seg[-n:])
                             seg = seg[:-n]
                             break  # 一旦任何一次拆分成功，则立马停止剩下的几元语法的尝试，直接对剩余的词做处理
@@ -357,7 +391,7 @@ class Company_Cut():
                         if i < len(company) - 2:
                             if company[i:i + 3] == ['子', '公', '司'] and i > 0:
                                 ind_check = company[i - 1] + '子'
-                                if self.vac_tag.get(ind_check, '') == 'ind':  # 如果前面的字加子是一个行业词，则子公司属于误判
+                                if self.is_ind(ind_check):  # 如果前面的字加子是一个行业词，则子公司属于误判
                                     company[i + 1:i + 3] == ['#', '#']
                                 else:
                                     company[i:i + 3] == ['#', '#', '#']
@@ -371,22 +405,47 @@ class Company_Cut():
                 if suffix in company[:-len(suffix)]:
                     # 需要分词
                     temp_company = ''
-                    for company_seg in jieba.cut(company):
+                    cut_list = self.cut_adjust(list(jieba.cut(company)))
+                    for i in range(len(cut_list)):
+
+                        if i > 0:
+                            former_word = cut_list[i - 1]
+                        else:
+                            former_word = ''
+                        company_seg = cut_list[i]
+                        if i < len(cut_list) - 1:
+                            after_word = cut_list[i + 1]
+                        else:
+                            after_word = ''
+
                         if company_seg == suffix:  # 直接被分词分出来了，可直接分拆
                             temp_company += '#' * len(suffix)
+
                         # 出现在词语中，没有被单独分离出来，则需要判断其位置
                         # 直接出现在尾部，则判断其之前的词是否单独成词
                         elif company_seg.endswith(suffix):
                             # 前面是行业词，如包子店，饺子店;前面是地区词，如浦东店;前面是序数词，如一店、二部、三局;均可拆分
                             front_part = company_seg[:-len(suffix)]
-                            if self.vac_tag.get(front_part) == 'ind' or front_part in self.loc_set or front_part[
-                                -1] in ordinal_num_set:
+                            if self.is_ind(front_part) or self.is_loc(front_part) or front_part[-1] in ordinal_num_set:
                                 temp_company += front_part + '#' * len(suffix)
+                            else:
+                                temp_company += company_seg
+
+                        # 直接出现在头部，可能误与后面合并，判断之前的词是否成词
+                        elif company_seg.startswith(suffix):
+                            #                             print('company_seg',company_seg)
+                            if not former_word:  # 前面没有词
+                                temp_company += company_seg
+                            # 前面是行业词，如包子店，饺子店;前面是地区词，如浦东店;前面是序数词，如一店、二部、三局;且拆分之后，剩余的部分依然成词，则可拆分
+                            elif (self.is_ind(former_word) or self.is_loc(former_word) or former_word[
+                                -1] in ordinal_num_set) and not self.is_vac(company_seg):
+                                temp_company += '#' * len(suffix) + company_seg[len(suffix):]
                             else:
                                 temp_company += company_seg
                         else:
                             temp_company += company_seg
                     company = temp_company
+                    #         print(company,raw_company)
         # 头部不能直接出现后缀，如果出现，则视为主体：
         for i in range(len(company)):
             if company[i] == '#':
@@ -498,7 +557,10 @@ class Company_Cut():
             一种是后缀是连锁有限公司，分词后是连锁/有限公司，分词后字数少了的。通常分词字数少了不用管，但是也可能出现部分词被合并到前面去的情况，
             比如第一分公司，变成了第一分/公司，这样就是有问题的了
             '''
-            if seg_list and len(seg_list[-1]) > len(org):  # 分词后字数多了的，则强行分拆即可
+            # 对分词结果进行调整
+            if not org:
+                pass
+            elif seg_list and len(seg_list[-1]) > len(org):  # 分词后字数多了的，则强行分拆即可
                 seg_list[-1] = seg_list[-1][:-len(org)]
                 seg_list.append(org)
             elif seg_list and len(seg_list[-1]) < len(org):  # 分词后字数变少了的，则不断往前比，如果恰好完全符合，则没问题
@@ -520,3 +582,32 @@ class Company_Cut():
                         seg_list[-suf_index + 1] = res_word + seg_list[-suf_index + 1]
             all_seg.extend(seg_list)
         return all_seg, company_split_result
+
+    def cluster_top_simi(self, cluster_vec, single_vec, topn=5):
+        '''
+        计算一个词处于某一类的概率
+        '''
+        simi_vec = np.dot(cluster_vec, single_vec)
+        topn_simi = simi_vec[matutils.argsort(simi_vec, topn=topn, reverse=True)]
+        return topn_simi.mean(0)
+
+    def name_probability(self, word):
+        try:
+            word_vec = self.model[word]
+        except:
+            return 0
+        return self.cluster_top_simi(self.name_vec, word_vec)
+
+    def ind_probability(self, word):
+        try:
+            word_vec = self.model[word]
+        except:
+            return 0
+        return self.cluster_top_simi(self.ind_vec, word_vec)
+
+    def loc_probability(self, word):
+        try:
+            word_vec = self.model[word]
+        except:
+            return 0
+        return self.cluster_top_simi(self.loc_vec, word_vec)
