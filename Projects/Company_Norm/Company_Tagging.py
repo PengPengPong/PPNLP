@@ -2,8 +2,11 @@
 本文件用于将一个公司正式彻底进行拆解，并标注响应位置信息
 '''
 
-from util import Company_Cut, find_range
+from util import Company_Cut, find_range,geometric_mean
+from config import TIER_DECAY_RATE,IND_WEIGHT,LOC_WEIGHT,NAME_WEIGHT
 import numpy as np
+
+
 
 org_cut = Company_Cut()
 
@@ -106,7 +109,7 @@ def company_split_tag(company):
             main, former, after, former_former, after_after = generate_main_former_after(seg_tag_list, i, 2)
             # 开始判断包围情况 abc abb bbababb aab
             if (not former and after_after != after) or (not after and former_former != former) or (
-                    former and after and former != after) or main == after:  # 前后不是同一部队（abc、abac类型），或者前后部队一致，但是是自己的友军，都算没有被包围
+                            former and after and former != after) or main == after:  # 前后不是同一部队（abc、abac类型），或者前后部队一致，但是是自己的友军，都算没有被包围
                 surround_list.append('none')
             elif after_after == after == former or former_former == former == after:  # 前后一个方向继续扩散包围（abaa类型）
                 surround_list.append('all')
@@ -408,6 +411,64 @@ def company_split_tag(company):
 
             print(('{0:-^50}').format(''))
     return company_seg_result
+
+def set_similarity(set1,set2):
+    if not set1 and not set2:
+        return 1
+    if not set1 or not set2:
+        return 0.5
+    return len(set1&set2)/len(set1|set2)
+
+def loc_similarity(loc1,loc2):
+    '''
+    靠前匹配即可
+    '''
+    min_len=min(len(loc1),len(loc2))
+    if loc1[:min_len]==loc2[:min_len]:
+        return 1
+    else:
+        return 0
+
+def company_normalize(company1, company2):
+    company1_seg_result = company_split_tag(company1)
+    company2_seg_result = company_split_tag(company2)
+    print('company1_seg_result',company1_seg_result)
+    print('company2_seg_result',company2_seg_result)
+    simi_list=[]
+    for index1,company1_tier_info in enumerate(company1_seg_result):
+        for index2,company2_tier_info in enumerate(company2_seg_result):
+
+            loc1=company1_tier_info.get('loc',[''])[-1]
+            loc2 =company2_tier_info.get('loc', [''])[-1]
+            loc_simi=loc_similarity(loc1,loc2)
+#             print(loc_simi)
+
+            ind1=set(company1_tier_info.get('ind',[]))
+            ind2 = set(company2_tier_info.get('ind', []))
+            ind_simi=set_similarity(ind1,ind2)
+#             print(ind_similarity)
+
+            name1=set(company1_tier_info.get('name',[]))
+            name2 =set(company2_tier_info.get('name', []))
+            if not name1 or not name2: # 没有字号的话，匹配一定是0
+                name_simi=0
+            else:
+                name_simi = set_similarity(name1,name2)
+#             print(name_similarity)
+
+            total_similarity=geometric_mean([loc_simi,ind_simi,name_simi],[LOC_WEIGHT,IND_WEIGHT,NAME_WEIGHT])
+            decay_rate=pow(TIER_DECAY_RATE,abs(index1-index2))
+            total_similarity=total_similarity*decay_rate
+            simi_list.append(total_similarity)
+
+    max_similarity=max(simi_list)
+    return max_similarity
+
+
+
+
+
+
 
 
 if __name__ == '__main__':

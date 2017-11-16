@@ -28,6 +28,21 @@ def find_range(peices, total):
         begin += step + 1
     return params_range
 
+def geometric_mean(num_list, weight_list):
+    '''
+    :param num_list:输入的数字列表
+    :param weight_list: 权重列表
+    :return: 返回结果的几何平均值
+    '''
+    num_list = np.array(num_list)
+    weight_list = np.array(weight_list)
+    result = 1.0
+    for i in pow(num_list, weight_list):
+        result *= i
+    if result >= 0:
+        return pow(result, 1.0 / weight_list.sum())
+    else:
+        return 0
 
 class Company_Cut():
     def __init__(self):
