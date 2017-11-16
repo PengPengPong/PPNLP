@@ -503,9 +503,9 @@ class Company_Cut():
         comp_tier = [int(self.company_suffix.get(i, 100)) for i in comp_seg_full]  # 主体标注为100
 
         # 对拆分进行调整：
-        # 如果等级为5，且后面有小于自己的等级，则该等级为5的切割不该存在
+        # 如果等级为5，或者长度为1，且后面有小于自己的等级，则该等级为5的切割不该存在
         for i in range(len(comp_tier)):
-            if comp_tier[i] != 100 and i < len(comp_tier) - 1 and comp_tier[i] > min(
+            if (comp_tier[i] ==5 or len(comp_seg_full[i])==1) and i < len(comp_tier) - 1 and comp_tier[i] > min(
                     comp_tier[i + 1:]):  # 主体直接略过，对于后缀，如果后面有小于自己的等级的，自己直接归为主体
                 comp_tier[i] = 100
 

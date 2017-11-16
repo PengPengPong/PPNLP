@@ -467,9 +467,5 @@ def company_normalize(company1, company2):
 
 
 
-
-
-
-
 if __name__ == '__main__':
     print(company_split_tag('中国移动通信集团有限公司'))
